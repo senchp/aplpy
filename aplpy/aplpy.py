@@ -323,14 +323,19 @@ class FITSFigure(Layers, Regions, Deprecated):
 
         xpix, ypix = wcs_util.world2pix(self._wcs, x, y)
 
-        degperpix = wcs_util.degperpix(self._wcs)
+        if self.userwcs and width and height:
+            degperpix_x = self._wcs.wcs.cd[0,0]
+            degperpix_y = self._wcs.wcs.cd[1,1]
+        else:
+            degperpix = wcs_util.degperpix(self._wcs)
+            degperpix_x = degperpix_y = degperpix
 
         if radius:
             dx_pix = radius / degperpix
             dy_pix = radius / degperpix
         elif width and height:
-            dx_pix = width / degperpix / 2.
-            dy_pix = height / degperpix / 2.
+            dx_pix = width / degperpix_x / 2.
+            dy_pix = height / degperpix_y / 2.
         else:
             raise Exception("Need to specify either radius= or width= and height= arguments")
 
