@@ -24,11 +24,11 @@ def check(header, convention=None, userwcs=False):
     ycp = float(ny / 2)
 
     # Check that the two projections are equal
-    if xproj<>yproj and not userwcs:
+    if xproj!=yproj and not userwcs:
         raise Exception("x and y projections do not agree")
 
-    # Check for CRVAL2<>0 for CAR projection
-    if xproj == '-CAR' and crval2 <> 0 and not userwcs:
+    # Check for CRVAL2!=0 for CAR projection
+    if xproj == '-CAR' and crval2 != 0 and not userwcs:
 
         if convention in ['wells', 'calabretta']:
             if convention=='wells':
