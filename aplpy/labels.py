@@ -42,7 +42,7 @@ class TickLabels(object):
 
         # Set major tick formatters
         if userwcs: # prevent longitude treatment for user coords
-            fx1 = WCSFormatter(wcs=self._wcs, coord='y', units=self.units)
+            fx1 = WCSFormatter(wcs=self._wcs, coord='x', units=self.units)
         else:
             fx1 = WCSFormatter(wcs=self._wcs, coord='x', units=self.units)
         fy1 = WCSFormatter(wcs=self._wcs, coord='y', units=self.units)

@@ -33,7 +33,7 @@ class Ticks(object):
 
         # Set major tick locators
         if userwcs: # prevent longitude treatment if user coords used
-            lx = WCSLocator(wcs=self._wcs, coord='y', userwcs=self.userwcs)
+            lx = WCSLocator(wcs=self._wcs, coord='x', userwcs=self.userwcs)
         else:
             lx = WCSLocator(wcs=self._wcs, coord='x', userwcs=self.userwcs)
         self._ax1.xaxis.set_major_locator(lx)
@@ -41,7 +41,7 @@ class Ticks(object):
         self._ax1.yaxis.set_major_locator(ly)
 
         if userwcs:
-            lxt = WCSLocator(wcs=self._wcs, coord='y', farside=True, userwcs=self.userwcs)
+            lxt = WCSLocator(wcs=self._wcs, coord='x', farside=True, userwcs=self.userwcs)
         else:
             lxt = WCSLocator(wcs=self._wcs, coord='x', farside=True, userwcs=self.userwcs)
         self._ax2.xaxis.set_major_locator(lxt)
