@@ -6,13 +6,14 @@ import warnings
 
 try:
     import matplotlib
-    import matplotlib.pyplot as mpl
-    import mpl_toolkits.axes_grid.parasite_axes as mpltk
 except ImportError:
     raise Exception("matplotlib 0.99.0 or later is required for APLpy")
 
 if version.LooseVersion(matplotlib.__version__) < version.LooseVersion('0.99.0'):
     raise Exception("matplotlib 0.99.0 or later is required for APLpy")
+
+import matplotlib.pyplot as mpl
+import mpl_toolkits.axes_grid.parasite_axes as mpltk
 
 try:
     import pyfits
@@ -29,14 +30,28 @@ try:
 except ImportError:
     raise Exception("numpy is required for APLpy")
 
-from matplotlib.patches import Circle, Rectangle, Ellipse, Polygon
+from matplotlib.patches import Circle, Rectangle, Ellipse, Polygon, FancyArrow
 from matplotlib.collections import PatchCollection, LineCollection
 
 try:
     import montage
+    if not hasattr(montage, 'reproject_hdu'):
+        raise
     montage_installed = True
 except:
     montage_installed = False
+
+try:
+    import Image
+    pil_installed = True
+except:
+    pil_installed = False
+
+try:
+    from pyavm import AVM
+    avm_installed = True
+except:
+    avm_installed = False
 
 if montage_installed:
     if version.LooseVersion(montage.__version__) < version.LooseVersion('0.9.2'):
@@ -81,7 +96,9 @@ class FITSFigure(Layers, Regions, Deprecated):
 
             *data*: [ string | pyfits.PrimaryHDU | pyfits.ImageHDU | pywcs.WCS ]
                 Either the filename of the FITS file to open, a pyfits
-                PrimaryHDU or ImageHDU object, or a pywcs WCS object.
+                PrimaryHDU or ImageHDU object, or a pywcs WCS object. It is
+                also possible to specify the filename of an RGB image tagged
+                with AVM meta-data.
 
         Optional Keyword Arguments:
 
@@ -146,10 +163,37 @@ class FITSFigure(Layers, Regions, Deprecated):
         if not 'figsize' in kwargs:
             kwargs['figsize'] = (10, 9)
 
+
         self.userwcs = userwcs
 
+        if type(data) is str and data.split('.')[-1].lower() in ['png', 'jpg', 'tif']:
+
+            if not pil_installed:
+                raise Exception("The Python Imaging Library (PIL) is required to read in RGB images")
+
+            if not avm_installed:
+                raise Exception("PyAVM is required to read in AVM meta-data from RGB images")
+
+            # Remember image filename
+            self._rgb_image = data
+
+            # Find image size
+            nx, ny = Image.open(data).size
+
+            # Now convert AVM information to WCS
+            data = AVM(data).to_wcs()
+
+            # Need to scale CDELT values sometimes the AVM meta-data is only really valid for the full-resolution image
+            data.wcs.cdelt = [data.wcs.cdelt[0] * data.naxis1 / float(nx), data.wcs.cdelt[1] * data.naxis2 / float(ny)]
+            data.wcs.crpix = [data.wcs.crpix[0] / data.naxis1 * float(nx), data.wcs.crpix[1] / data.naxis2 * float(ny)]
+
+            # Update the NAXIS values with the true dimensions of the RGB image
+            data.naxis1 = nx
+            data.naxis2 = ny
+
         if isinstance(data, pywcs.WCS):
-            self._hdu, self._wcs = pyfits.ImageHDU(np.zeros((data.naxis2, data.naxis1), dtype=float)), data
+
+            self._hdu, self._wcs = pyfits.ImageHDU(data=np.zeros((data.naxis2, data.naxis1), dtype=float), header=data.to_header()), data
             if downsample:
                 warnings.warn("downsample argument is ignored if data passed is a WCS object")
                 downsample = False
@@ -242,9 +286,28 @@ class FITSFigure(Layers, Regions, Deprecated):
 
             # Read in FITS file
             try:
-                hdu = pyfits.open(filename)[hdu]
+                hdulist = pyfits.open(filename)
             except:
                 raise Exception("An error occured while reading the FITS file")
+
+            # Check whether the HDU specified contains any data, otherwise
+            # cycle through all HDUs to find one that contains valid image data
+            if hdulist[hdu].data is None:
+                found = False
+                for alt_hdu in range(len(hdulist)):
+                    if isinstance(hdulist[alt_hdu], pyfits.PrimaryHDU) or \
+                       isinstance(hdulist[alt_hdu], pyfits.ImageHDU):
+                        if hdulist[alt_hdu].data is not None:
+                            warnings.warn("hdu=%i does not contain any data, using hdu=%i instead" % (hdu, alt_hdu))
+                            hdu = hdulist[alt_hdu]
+                            found = True
+                            break
+                if not found:
+                    raise Exception("FITS file does not contain any image data")
+
+            else:
+                hdu = hdulist[hdu]
+
 
         elif isinstance(data, pyfits.PrimaryHDU) or isinstance(data, pyfits.ImageHDU):
 
@@ -352,7 +415,7 @@ class FITSFigure(Layers, Regions, Deprecated):
     @auto_refresh
     def show_grayscale(self, vmin=None, vmid=None, vmax=None, \
                             pmin=0.25, pmax=99.75, \
-                            stretch='linear', exponent=2, invert='default', smooth=None, kernel='gauss'):
+                            stretch='linear', exponent=2, invert='default', smooth=None, kernel='gauss', interpolation='nearest'):
         '''
         Show a grayscale image of the FITS file
 
@@ -401,6 +464,14 @@ class FITSFigure(Layers, Regions, Deprecated):
                 Default kernel used for smoothing is 'gauss'. The user can
                 specify if they would prefer 'gauss', 'box', or a custom
                 kernel. All kernels are normalized to ensure flux retention.
+
+            *interpolation*: [ string ]
+                The type of interpolation to use for the image. The default is
+                'nearest'. Other options include 'none' (no interpolation,
+                meaning that if exported to a postscript file, the grayscale
+                will be output at native resolution irrespective of the dpi
+                setting), 'bilinear', 'bicubic', and many more (see the
+                matplotlib documentation for imshow).
         '''
 
         if invert=='default':
@@ -411,7 +482,7 @@ class FITSFigure(Layers, Regions, Deprecated):
         else:
             cmap = 'gray'
 
-        self.show_colorscale(vmin=vmin, vmid=vmid, vmax=vmax, stretch=stretch, exponent=exponent, cmap=cmap, pmin=pmin, pmax=pmax, smooth=smooth, kernel=kernel)
+        self.show_colorscale(vmin=vmin, vmid=vmid, vmax=vmax, stretch=stretch, exponent=exponent, cmap=cmap, pmin=pmin, pmax=pmax, smooth=smooth, kernel=kernel, interpolation=interpolation)
 
     @auto_refresh
     def hide_grayscale(self, *args, **kwargs):
@@ -420,7 +491,7 @@ class FITSFigure(Layers, Regions, Deprecated):
     @auto_refresh
     def show_colorscale(self, vmin=None, vmid=None, vmax=None, \
                              pmin=0.25, pmax=99.75,
-                             stretch='linear', exponent=2, cmap='default', smooth=None, kernel='gauss'):
+                             stretch='linear', exponent=2, cmap='default', smooth=None, kernel='gauss', interpolation='nearest'):
         '''
         Show a colorscale image of the FITS file
 
@@ -467,6 +538,14 @@ class FITSFigure(Layers, Regions, Deprecated):
                 Default kernel used for smoothing is 'gauss'. The user can
                 specify if they would prefer 'gauss', 'box', or a custom
                 kernel. All kernels are normalized to ensure flux retention.
+
+            *interpolation*: [ string ]
+                The type of interpolation to use for the image. The default is
+                'nearest'. Other options include 'none' (no interpolation,
+                meaning that if exported to a postscript file, the colorscale
+                will be output at native resolution irrespective of the dpi
+                setting), 'bilinear', 'bicubic', and many more (see the
+                matplotlib documentation for imshow).
         '''
 
         if cmap=='default':
@@ -514,7 +593,7 @@ class FITSFigure(Layers, Regions, Deprecated):
             self.image.origin='lower'
             self.image.set_data(convolve_util.convolve(self._hdu.data, smooth=smooth, kernel=kernel))
         else:
-            self.image = self._ax1.imshow(convolve_util.convolve(self._hdu.data, smooth=smooth, kernel=kernel), cmap=cmap, interpolation='nearest', origin='lower', extent=self._extent, norm=normalizer)
+            self.image = self._ax1.imshow(convolve_util.convolve(self._hdu.data, smooth=smooth, kernel=kernel), cmap=cmap, interpolation=interpolation, origin='lower', extent=self._extent, norm=normalizer)
 
         xmin, xmax = self._ax1.get_xbound()
         if xmin == 0.0:
@@ -545,29 +624,46 @@ class FITSFigure(Layers, Regions, Deprecated):
         self.image.set_cmap(cm)
 
     @auto_refresh
-    def show_rgb(self, filename, interpolation='nearest', flip=False):
+    def show_rgb(self, filename=None, interpolation='nearest', vertical_flip=False, horizontal_flip=False, flip=False):
         '''
         Show a 3-color image instead of the FITS file data
 
-        Required Arguments:
-
-            *filename*
-                The 3-color image should have exactly the same dimensions as the FITS file, and
-                will be shown with exactly the same projection.
-
         Optional Arguments:
 
-            *flip*: [ True | False ]
-                Whether to vertically flip the RGB image in case it is the
-                wrong way around.
+            *filename*
+                The 3-color image should have exactly the same dimensions
+                as the FITS file, and will be shown with exactly the same
+                projection. If FITSFigure was initialized with an
+                AVM-tagged RGB image, the filename is not needed here.
+
+            *vertical_flip*: [ True | False ]
+                Whether to vertically flip the RGB image
+
+            *horizontal_flip*: [ True | False ]
+                Whether to horizontally flip the RGB image
         '''
 
-        img = mpl.imread(filename)
+        if not pil_installed:
+            raise Exception("The Python Imaging Library (PIL) is required to read in RGB images")
 
         if flip:
-            img = np.flipud(img)
+            warnings.warn("Note that show_rgb should now correctly flip RGB images, so the flip= argument is now deprecated. If you still need to flip an image vertically or horizontally, you can use the vertical_flip= and horizontal_flip arguments instead.")
 
-        self.image = self._ax1.imshow(img, extent=self._extent, interpolation=interpolation, origin='upper')
+        if filename is None:
+            if hasattr(self, '_rgb_image'):
+                image = Image.open(self._rgb_image)
+            else:
+                raise Exception("Need to specify the filename of an RGB image")
+        else:
+            image = Image.open(filename)
+
+        if vertical_flip:
+            image = image.transpose(Image.FLIP_TOP_BOTTOM)
+
+        if horizontal_flip:
+            image = image.transpose(Image.FLIP_LEFT_RIGHT)
+
+        self.image = self._ax1.imshow(image, extent=self._extent, interpolation=interpolation, origin='lower')
 
     @auto_refresh
     def show_contour(self, data, hdu=0, layer=None, levels=5, filled=False,
@@ -744,7 +840,7 @@ class FITSFigure(Layers, Regions, Deprecated):
     # Show circles. Different from markers as this method allows more definitions
     # for the circles.
     @auto_refresh
-    def show_circles(self, xw, yw, radius, layer=False, **kwargs):
+    def show_circles(self, xw, yw, radius, layer=False, zorder=None, **kwargs):
         '''
         Overlay circles on the current plot.
 
@@ -802,7 +898,10 @@ class FITSFigure(Layers, Regions, Deprecated):
         for i in range(len(xp)):
             patches.append(Circle((xp[i], yp[i]), radius=rp[i], **kwargs))
 
-        c = self._ax1.add_collection(PatchCollection(patches, match_original=True))
+        p = PatchCollection(patches, match_original=True)
+        if zorder is not None:
+            p.zorder = zorder
+        c = self._ax1.add_collection(p)
 
         if layer:
             circle_set_name = layer
@@ -813,7 +912,7 @@ class FITSFigure(Layers, Regions, Deprecated):
         self._layers[circle_set_name] = c
 
     @auto_refresh
-    def show_ellipses(self, xw, yw, width, height, layer=False, angle= 0, **kwargs):
+    def show_ellipses(self, xw, yw, width, height, angle=0, layer=False, zorder=None, **kwargs):
         '''
        Overlay ellipses on the current plot.
 
@@ -890,7 +989,10 @@ class FITSFigure(Layers, Regions, Deprecated):
         for i in range(len(xp)):
             patches.append(Ellipse((xp[i], yp[i]), width=wp[i], height=hp[i], angle=ap[i],**kwargs))
 
-        c = self._ax1.add_collection(PatchCollection(patches, match_original=True))
+        p = PatchCollection(patches, match_original=True)
+        if zorder is not None:
+            p.zorder = zorder
+        c = self._ax1.add_collection(p)
 
         if layer:
             ellipse_set_name = layer
@@ -901,7 +1003,7 @@ class FITSFigure(Layers, Regions, Deprecated):
         self._layers[ellipse_set_name] = c
 
     @auto_refresh
-    def show_rectangles(self, xw, yw, width, height, layer=False, **kwargs):
+    def show_rectangles(self, xw, yw, width, height, layer=False, zorder=None, **kwargs):
         '''
        Overlay rectangles on the current plot.
 
@@ -970,7 +1072,10 @@ class FITSFigure(Layers, Regions, Deprecated):
         for i in range(len(xp)):
             patches.append(Rectangle((xp[i], yp[i]), width=wp[i], height=hp[i], **kwargs))
 
-        c = self._ax1.add_collection(PatchCollection(patches, match_original=True))
+        p = PatchCollection(patches, match_original=True)
+        if zorder is not None:
+            p.zorder = zorder
+        c = self._ax1.add_collection(p)
 
         if layer:
             rectangle_set_name = layer
@@ -981,7 +1086,7 @@ class FITSFigure(Layers, Regions, Deprecated):
         self._layers[rectangle_set_name] = c
 
     @auto_refresh
-    def show_lines(self, line_list, layer=False, **kwargs):
+    def show_lines(self, line_list, layer=False, zorder=None, **kwargs):
         '''
        Overlay rectangles on the current plot.
 
@@ -994,7 +1099,7 @@ class FITSFigure(Layers, Regions, Deprecated):
        Optional Keyword Arguments:
 
            *layer*: [ string ]
-               The name of the rectangle layer. This is useful for giving
+               The name of the line(s) layer. This is useful for giving
                custom names to layers (instead of line_set_n) and for
                replacing existing layers.
 
@@ -1019,7 +1124,10 @@ class FITSFigure(Layers, Regions, Deprecated):
             xp, yp = wcs_util.world2pix(self._wcs, line[0, :],line[1, :])
             lines.append(np.column_stack((xp, yp)))
 
-        c = self._ax1.add_collection(LineCollection(lines, **kwargs))
+        l = LineCollection(lines, **kwargs)
+        if zorder is not None:
+            l.zorder = zorder
+        c = self._ax1.add_collection(l)
 
         if layer:
             line_set_name = layer
@@ -1030,7 +1138,93 @@ class FITSFigure(Layers, Regions, Deprecated):
         self._layers[line_set_name] = c
 
     @auto_refresh
-    def show_polygons(self, polygon_list, layer=False, **kwargs):
+    def show_arrows(self, x, y, dx, dy, width='auto', head_width='auto',
+                    head_length='auto', layer=False, zorder=None, **kwargs):
+        '''
+       Overlay arrows on the current plot.
+
+       Required arguments:
+
+           *x, y, dx, dy*: [ float | list | array ]
+               Origin and displacement of the arrows in world coordinates.
+               These can either be scalars to plot a single arrow, or lists or
+               arrays to plot multiple arrows.
+
+       Optional Keyword Arguments:
+
+           *width*: [ float ]
+               The width of the arrow body, in pixels (default: 2% of the
+               arrow length)
+
+           *head_width*: [ float ]
+               The width of the arrow head, in pixels (default: 5% of the
+               arrow length)
+
+           *head_length*: [ float ]
+               The length of the arrow head, in pixels (default: 5% of the
+               arrow length)
+
+           *layer*: [ string ]
+               The name of the arrow(s) layer. This is useful for giving
+               custom names to layers (instead of line_set_n) and for
+               replacing existing layers.
+
+       Additional keyword arguments (such as color, offsets, cmap,
+       or linewidth) can be used to control the appearance of the
+       arrows, which is an instances of the matplotlib FancyArrow class.
+       For more information on available arguments, see `FancyArrow
+       <http://matplotlib.sourceforge.net/api/artist_api.html?
+       highlight=arrow#matplotlib.patches.FancyArrow>`_.
+       '''
+
+        if 'length_includes_head' not in kwargs:
+            kwargs['length_includes_head'] = True
+
+        if layer:
+            self.remove_layer(layer, raise_exception=False)
+
+        arrows = []
+
+        if np.isscalar(x):
+            x, y, dx, dy = [x], [y], [dx], [dy]
+
+        for i in range(len(x)):
+
+            xp1, yp1 = wcs_util.world2pix(self._wcs, x[i], y[i])
+            xp2, yp2 = wcs_util.world2pix(self._wcs, x[i]+dx[i], y[i]+dy[i])
+
+            if width == 'auto':
+                kwargs['width'] = 0.02 * np.sqrt((xp2 - xp1) ** 2 + (yp2 - yp1) ** 2)
+            else:
+                kwargs['width'] = width
+
+            if head_width == 'auto':
+                kwargs['head_width'] = 0.1 * np.sqrt((xp2 - xp1) ** 2 + (yp2 - yp1) ** 2)
+            else:
+                kwargs['head_width'] = head_width
+
+            if head_length == 'auto':
+                kwargs['head_length'] = 0.1 * np.sqrt((xp2 - xp1) ** 2 + (yp2 - yp1) ** 2)
+            else:
+                kwargs['head_length'] = head_length
+
+            arrows.append(FancyArrow(xp1, yp1, xp2 - xp1, yp2 - yp1, **kwargs))
+
+        p = PatchCollection(arrows, match_original=True)
+        if zorder is not None:
+            p.zorder = zorder
+        c = self._ax1.add_collection(p)
+
+        if layer:
+            line_set_name = layer
+        else:
+            self._linelist_counter += 1
+            line_set_name = 'arrow_set_'+str(self._linelist_counter)
+
+        self._layers[line_set_name] = c
+
+    @auto_refresh
+    def show_polygons(self, polygon_list, layer=False, zorder=None, **kwargs):
         '''
         Overlay polygons on the current plot.
 
@@ -1072,7 +1266,10 @@ class FITSFigure(Layers, Regions, Deprecated):
         for i in range(len(pix_polygon_list)):
             patches.append(Polygon(pix_polygon_list[i], **kwargs))
 
-        c = self._ax1.add_collection(PatchCollection(patches, match_original=True))
+        p = PatchCollection(patches, match_original=True)
+        if zorder is not None:
+            p.zorder = zorder
+        c = self._ax1.add_collection(p)
 
         if layer:
             poly_set_name = layer
@@ -1214,7 +1411,7 @@ class FITSFigure(Layers, Regions, Deprecated):
         artists = []
         if adjust_bbox:
             for artist in self._layers.values():
-                if hasattr(artist, 'get_window_extent'):
+                if isinstance(artist, matplotlib.text.Text):
                     artists.append(artist)
             self._figure.savefig(filename, dpi=dpi, transparent=transparent, bbox_inches='tight', bbox_extra_artists=artists)
         else:
@@ -1222,10 +1419,10 @@ class FITSFigure(Layers, Regions, Deprecated):
 
     def _initialize_view(self):
 
-        self._ax1.xaxis.set_view_interval(+0.5, self._wcs.naxis1+0.5)
-        self._ax1.yaxis.set_view_interval(+0.5, self._wcs.naxis2+0.5)
-        self._ax2.xaxis.set_view_interval(+0.5, self._wcs.naxis1+0.5)
-        self._ax2.yaxis.set_view_interval(+0.5, self._wcs.naxis2+0.5)
+        self._ax1.xaxis.set_view_interval(+0.5, self._wcs.naxis1+0.5, ignore=True)
+        self._ax1.yaxis.set_view_interval(+0.5, self._wcs.naxis2+0.5, ignore=True)
+        self._ax2.xaxis.set_view_interval(+0.5, self._wcs.naxis1+0.5, ignore=True)
+        self._ax2.yaxis.set_view_interval(+0.5, self._wcs.naxis2+0.5, ignore=True)
 
         # set the image extent to FITS pixel coordinates
         self._extent = (0.5, self._wcs.naxis1+0.5, 0.5, self._wcs.naxis2+0.5)
@@ -1349,23 +1546,52 @@ class FITSFigure(Layers, Regions, Deprecated):
             >>> f.beam.set_color('white')
             >>> f.beam.set_hatch('+')
             >>> ...
+
+        If more than one beam is added, the beam object becomes a list. In
+        this case, to control the aspect of one of the beams, you will need tp
+        specify the beam index::
+
+            >>> ...
+            >>> f.beam[2].set_hatch('/')
+            >>> ...
         '''
+
+        # Initalize the beam and set parameters
+        b = Beam(self)
+        b.show(*args, **kwargs)
+
         if hasattr(self, 'beam'):
-            raise Exception("Beam already exists")
-        try:
-            self.beam = Beam(self)
-            self.beam.show(*args, **kwargs)
-        except:
-            del self.beam
-            raise
+            if type(self.beam) is list:
+                self.beam.append(b)
+            else:
+                self.beam = [self.beam, b]
+        else:
+            self.beam = b
 
     @auto_refresh
-    def remove_beam(self):
+    def remove_beam(self, beam_index=None):
         '''
-        Removes the beam from the current figure
+        Removes the beam from the current figure. If more than one beam is
+        present, the index of the beam should be specified using beam_index=
         '''
-        self.beam._remove()
-        del self.beam
+
+        if type(self.beam) is list:
+
+            if beam_index is None:
+                raise Exception("More than one beam present - use beam_index= to specify which one to remove")
+            else:
+                b = self.beam.pop(beam_index)
+                b._remove()
+                del b
+
+            # If only one beam is present, remove containing list
+            if len(self.beam) == 1:
+                self.beam = self.beam[0]
+
+        else:
+
+            self.beam._remove()
+            del self.beam
 
     @auto_refresh
     def add_scalebar(self, *args, **kwargs):
