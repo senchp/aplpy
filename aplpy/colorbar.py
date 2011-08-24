@@ -22,7 +22,7 @@ class Colorbar(object):
         self._label_fontproperties = FontProperties()
 
     @auto_refresh
-    def show(self, location='right', width=0.2, pad=0.05, ticks=None, labels=True):
+    def show(self, location='right', width=0.2, pad=0.05, ticks=None, labels=True, box=None, box_orientation='vertical'):
         '''
         Show a colorbar on the side of the image.
 
@@ -42,41 +42,61 @@ class Colorbar(object):
 
             *labels*: [ True or False ]
                 Whether to show numerical labels.
+
+            *box*: [ list ]
+                A custom box within which to place the colorbar. This should
+                be in the form [xmin, ymin, dx, dy] and be in relative figure
+                units. This overrides the location argument.
+
+            *box_orientation* [ str ]
+                The orientation of the colorbar within the box. Can be
+                'horizontal' or 'vertical'
         '''
 
         self._base_settings['location'] = location
         self._base_settings['width'] = width
         self._base_settings['pad'] = pad
+        self._base_settings['ticks'] = ticks
+        self._base_settings['labels'] = labels
+        self._base_settings['box'] = box
+        self._base_settings['box_orientation'] = box_orientation
 
         if self._parent.image:
 
             if self._colorbar_axes:
                 self._parent._figure.delaxes(self._colorbar_axes)
 
-            divider = make_axes_locatable(self._parent._ax1)
+            if box is None:
 
-            if location=='right':
-                self._colorbar_axes = divider.new_horizontal(size=width, pad=pad, axes_class=maxes.Axes)
-                orientation='vertical'
-            elif location=='top':
-                self._colorbar_axes = divider.new_vertical(size=width, pad=pad, axes_class=maxes.Axes)
-                orientation='horizontal'
-            elif location=='left':
-                warnings.warn("Left colorbar not fully implemented")
-                self._colorbar_axes = divider.new_horizontal(size=width, pad=pad, pack_start=True, axes_class=maxes.Axes)
-                locator = divider.new_locator(nx=0, ny=0)
-                self._colorbar_axes.set_axes_locator(locator)
-                orientation='vertical'
-            elif location=='bottom':
-                warnings.warn("Bottom colorbar not fully implemented")
-                self._colorbar_axes = divider.new_vertical(size=width, pad=pad, pack_start=True, axes_class=maxes.Axes)
-                locator = divider.new_locator(nx=0, ny=0)
-                self._colorbar_axes.set_axes_locator(locator)
-                orientation='horizontal'
+                divider = make_axes_locatable(self._parent._ax1)
+
+                if location=='right':
+                    self._colorbar_axes = divider.new_horizontal(size=width, pad=pad, axes_class=maxes.Axes)
+                    orientation='vertical'
+                elif location=='top':
+                    self._colorbar_axes = divider.new_vertical(size=width, pad=pad, axes_class=maxes.Axes)
+                    orientation='horizontal'
+                elif location=='left':
+                    warnings.warn("Left colorbar not fully implemented")
+                    self._colorbar_axes = divider.new_horizontal(size=width, pad=pad, pack_start=True, axes_class=maxes.Axes)
+                    locator = divider.new_locator(nx=0, ny=0)
+                    self._colorbar_axes.set_axes_locator(locator)
+                    orientation='vertical'
+                elif location=='bottom':
+                    warnings.warn("Bottom colorbar not fully implemented")
+                    self._colorbar_axes = divider.new_vertical(size=width, pad=pad, pack_start=True, axes_class=maxes.Axes)
+                    locator = divider.new_locator(nx=0, ny=0)
+                    self._colorbar_axes.set_axes_locator(locator)
+                    orientation='horizontal'
+                else:
+                    raise Exception("location should be one of: right/top")
+
+                self._parent._figure.add_axes(self._colorbar_axes)
+
             else:
-                raise Exception("location should be one of: right/top")
 
-            self._parent._figure.add_axes(self._colorbar_axes)
+                self._colorbar_axes = self._parent._figure.add_axes(box)
+                orientation = box_orientation
 
             self._colorbar = self._parent._figure.colorbar(self._parent.image, cax=self._colorbar_axes, orientation=orientation, ticks=ticks)
 
@@ -86,19 +106,19 @@ class Colorbar(object):
                     tick.tick2On = True
                     tick.label1On = False
                     tick.label2On = labels
-            if location=='top':
+            elif location=='top':
                 for tick in self._colorbar_axes.xaxis.get_major_ticks():
                     tick.tick1On = True
                     tick.tick2On = True
                     tick.label1On = False
                     tick.label2On = labels
-            if location=='left':
+            elif location=='left':
                 for tick in self._colorbar_axes.yaxis.get_major_ticks():
                     tick.tick1On = True
                     tick.tick2On = True
                     tick.label1On = labels
                     tick.label2On = False
-            if location=='bottom':
+            elif location=='bottom':
                 for tick in self._colorbar_axes.xaxis.get_major_ticks():
                     tick.tick1On = True
                     tick.tick2On = True
@@ -149,6 +169,37 @@ class Colorbar(object):
         Set the spacing between the colorbar and the image relative to the canvas size.
         '''
         self._base_settings['pad'] = pad
+        self.show(**self._base_settings)
+        self.set_font(fontproperties=self._label_fontproperties)
+
+    @auto_refresh
+    def set_ticks(self, ticks):
+        '''
+        Set the position of the ticks on the colorbar.
+        '''
+        self._base_settings['ticks'] = ticks
+        self.show(**self._base_settings)
+        self.set_font(fontproperties=self._label_fontproperties)
+
+    @auto_refresh
+    def set_labels(self, labels):
+        '''
+        Set whether to show numerical labels.
+        '''
+        self._base_settings['labels'] = labels
+        self.show(**self._base_settings)
+        self.set_font(fontproperties=self._label_fontproperties)
+
+    @auto_refresh
+    def set_box(self, box, box_orientation='vertical'):
+        '''
+        Set the box within which to place the colorbar. This should be in the
+        form [xmin, ymin, dx, dy] and be in relative figure units. The
+        orientation of the colorbar within the box can be controlled with the
+        box_orientation argument.
+        '''
+        self._base_settings['box'] = box
+        self._base_settings['box_orientation'] = box_orientation
         self.show(**self._base_settings)
         self.set_font(fontproperties=self._label_fontproperties)
 

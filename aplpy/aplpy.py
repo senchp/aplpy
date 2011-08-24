@@ -163,16 +163,15 @@ class FITSFigure(Layers, Regions, Deprecated):
         if not 'figsize' in kwargs:
             kwargs['figsize'] = (10, 9)
 
-
         self.userwcs = userwcs
 
-        if type(data) is str and data.split('.')[-1].lower() in ['png', 'jpg', 'tif']:
+        if isinstance(data, basestring) and data.split('.')[-1].lower() in ['png', 'jpg', 'tif']:
 
             if not pil_installed:
-                raise Exception("The Python Imaging Library (PIL) is required to read in RGB images")
+                raise ImportError("The Python Imaging Library (PIL) is required to read in RGB images")
 
             if not avm_installed:
-                raise Exception("PyAVM is required to read in AVM meta-data from RGB images")
+                raise ImportError("PyAVM is required to read in AVM meta-data from RGB images")
 
             # Remember image filename
             self._rgb_image = data
@@ -276,19 +275,19 @@ class FITSFigure(Layers, Regions, Deprecated):
 
     def _get_hdu(self, data, hdu, north, convention=None, slices=[], userwcs=False):
 
-        if type(data) == str:
+        if isinstance(data, basestring):
 
             filename = data
 
             # Check file exists
             if not os.path.exists(filename):
-                raise Exception("File not found: "+filename)
+                raise IOError("File not found: "+filename)
 
             # Read in FITS file
             try:
                 hdulist = pyfits.open(filename)
             except:
-                raise Exception("An error occured while reading the FITS file")
+                raise IOError("An error occured while reading the FITS file")
 
             # Check whether the HDU specified contains any data, otherwise
             # cycle through all HDUs to find one that contains valid image data
@@ -412,9 +411,10 @@ class FITSFigure(Layers, Regions, Deprecated):
         self._ax1.set_ylim(ypix-dy_pix, ypix+dy_pix)
 
     @auto_refresh
-    def show_grayscale(self, vmin=None, vmid=None, vmax=None, \
-                            pmin=0.25, pmax=99.75, \
-                            stretch='linear', exponent=2, invert='default', smooth=None, kernel='gauss', interpolation='nearest'):
+    def show_grayscale(self, vmin=None, vmid=None, vmax=None,
+                            pmin=0.25, pmax=99.75,
+                            stretch='linear', exponent=2, invert='default',
+                            smooth=None, kernel='gauss', interpolation='nearest'):
         '''
         Show a grayscale image of the FITS file
 
@@ -442,8 +442,9 @@ class FITSFigure(Layers, Regions, Deprecated):
                 The stretch function to use
 
             *vmid*: [ None | float ]
-                Mid-pixel value used for the log and arcsinh stretches. If
-                set to None, this is set to a sensible value.
+                Baseline value used for the log and arcsinh stretches. If
+                set to None, this is set to zero for log stretches and to
+                vmin - (vmax - vmin) / 30. for arcsinh stretches
 
             *exponent*: [ float ]
                 If stretch is set to 'power', this is the exponent to use
@@ -518,8 +519,9 @@ class FITSFigure(Layers, Regions, Deprecated):
                 The stretch function to use
 
             *vmid*: [ None | float ]
-                Mid-pixel value used for the log and arcsinh stretches. If
-                set to None, this is set to a sensible value.
+                Baseline value used for the log and arcsinh stretches. If
+                set to None, this is set to zero for log stretches and to
+                vmin - (vmax - vmin) / 30. for arcsinh stretches
 
             *exponent*: [ float ]
                 If stretch is set to 'power', this is the exponent to use
@@ -554,7 +556,7 @@ class FITSFigure(Layers, Regions, Deprecated):
         max_auto = np.equal(vmax, None)
 
         # The set of available functions
-        cmap = mpl.cm.get_cmap(cmap, 1000)
+        cmap = mpl.cm.get_cmap(cmap)
 
         if min_auto:
             vmin = self._auto_v(pmin)
@@ -568,16 +570,12 @@ class FITSFigure(Layers, Regions, Deprecated):
 
         # Adjust vmin/vmax if auto
         if min_auto:
-            if stretch != 'linear':
-                warnings.warn("Auto-scaling for non-linear stretches may produce slightly different results compared to APLpy 0.9.4")
-            else:
+            if stretch == 'linear':
                 vmin = -0.1 * (vmax - vmin) + vmin
             print "Auto-setting vmin to %10.3e" % vmin
 
         if max_auto:
-            if stretch != 'linear':
-                warnings.warn("Auto-scaling for non-linear stretches may produce slightly different results compared to APLpy 0.9.4")
-            else:
+            if stretch == 'linear':
                 vmax = 0.1 * (vmax - vmin) + vmax
             print "Auto-setting vmax to %10.3e" % vmax
 
@@ -590,6 +588,7 @@ class FITSFigure(Layers, Regions, Deprecated):
             self.image.set_norm(normalizer)
             self.image.set_cmap(cmap=cmap)
             self.image.origin='lower'
+            self.image.set_interpolation(interpolation)
             self.image.set_data(convolve_util.convolve(self._hdu.data, smooth=smooth, kernel=kernel))
         else:
             self.image = self._ax1.imshow(convolve_util.convolve(self._hdu.data, smooth=smooth, kernel=kernel), cmap=cmap, interpolation=interpolation, origin='lower', extent=self._extent, norm=normalizer)
@@ -750,9 +749,9 @@ class FITSFigure(Layers, Regions, Deprecated):
             self.remove_layer(layer, raise_exception=False)
 
         if cmap:
-            cmap = mpl.cm.get_cmap(cmap, 1000)
+            cmap = mpl.cm.get_cmap(cmap)
         elif not colors:
-            cmap = mpl.cm.get_cmap('jet', 1000)
+            cmap = mpl.cm.get_cmap('jet')
 
         hdu_contour, wcs_contour = self._get_hdu(data, hdu, False, \
             convention=convention, slices=slices, userwcs=userwcs)
@@ -1087,7 +1086,7 @@ class FITSFigure(Layers, Regions, Deprecated):
     @auto_refresh
     def show_lines(self, line_list, layer=False, zorder=None, **kwargs):
         '''
-       Overlay rectangles on the current plot.
+       Overlay lines on the current plot.
 
        Required arguments:
 
@@ -1229,9 +1228,10 @@ class FITSFigure(Layers, Regions, Deprecated):
 
         Required arguments:
 
-            *polygon_list*: [ list ]
-                A list of one or more 2xN numpy arrays which contain
+            *polygon_list*: [ list or tuple ]
+                A list of one or more 2xN or Nx2 Numpy arrays which contain
                 the [x, y] positions of the vertices in world coordinates.
+                Note that N should be greater than 2.
 
         Optional Keyword Arguments:
 
@@ -1254,10 +1254,24 @@ class FITSFigure(Layers, Regions, Deprecated):
         if layer:
             self.remove_layer(layer, raise_exception=False)
 
+        if type(polygon_list) not in [list, tuple]:
+            raise Exception("polygon_list should be a list or tuple of Numpy arrays")
+
         pix_polygon_list = []
-        for i in range(len(polygon_list)):
-            xw = polygon_list[i][0, :]
-            yw = polygon_list[i][1, :]
+        for polygon in polygon_list:
+
+            if type(polygon) is not np.ndarray:
+                raise Exception("Polygon should be given as a Numpy array")
+
+            if polygon.shape[0] == 2 and polygon.shape[1] > 2:
+                xw = polygon[0, :]
+                yw = polygon[1, :]
+            elif polygon.shape[0] > 2 and polygon.shape[1] == 2:
+                xw = polygon[:, 0]
+                yw = polygon[:, 1]
+            else:
+                raise Exception("Polygon should have dimensions 2xN or Nx2 with N>2")
+
             xp, yp = wcs_util.world2pix(self._wcs, xw, yw)
             pix_polygon_list.append(np.column_stack((xp, yp)))
 
@@ -1313,6 +1327,15 @@ class FITSFigure(Layers, Regions, Deprecated):
         # Can't pass fontproperties=None to text. Only pass it if it is not None.
         if fontproperties:
             kwargs['fontproperties'] = fontproperties
+
+        if not np.isscalar(x):
+            raise Exception("x should be a single value")
+
+        if not np.isscalar(y):
+            raise Exception("y should be a single value")
+
+        if not np.isscalar(text):
+            raise Exception("text should be a single value")
 
         if relative:
             l = self._ax1.text(x, y, text, color=color,
@@ -1453,7 +1476,7 @@ class FITSFigure(Layers, Regions, Deprecated):
             self._figure.apl_grayscale_invert_default = False
             self._figure.apl_colorscale_cmap_default = 'jet'
             if self.image:
-                self.image.set_cmap(cmap=mpl.cm.get_cmap('jet', 1000))
+                self.image.set_cmap(cmap=mpl.cm.get_cmap('jet'))
         elif theme=='publication':
             self.frame.set_color('black')
             self.frame.set_linewidth(0.5)
@@ -1462,7 +1485,7 @@ class FITSFigure(Layers, Regions, Deprecated):
             self._figure.apl_grayscale_invert_default = True
             self._figure.apl_colorscale_cmap_default = 'gist_heat'
             if self.image:
-                self.image.set_cmap(cmap=mpl.cm.get_cmap('gist_yarg', 1000))
+                self.image.set_cmap(cmap=mpl.cm.get_cmap('gist_yarg'))
 
     def world2pixel(self, xw, yw):
         '''

@@ -41,6 +41,9 @@ class APLpyNormalize(Normalize):
                 the returned value will be 0 or 1, whichever is closer.
         '''
 
+        if vmax < vmin:
+            raise Exception("vmax should be larger than vmin")
+
         # Call original initalization routine
         Normalize.__init__(self, vmin=vmin, vmax=vmax, clip=clip)
 
@@ -53,14 +56,23 @@ class APLpyNormalize(Normalize):
 
         if np.equal(vmid, None):
             if stretch == 'log':
-                self.midpoint = 0.05
+                if vmin > 0:
+                    self.midpoint = vmax / vmin
+                else:
+                    raise Exception("When using a log stretch, if vmin < 0, then vmid has to be specified")
             elif stretch == 'arcsinh':
-                self.midpoint = -0.033
+                self.midpoint = -1./30.
             else:
                 self.midpoint = None
         else:
-            self.midpoint = (vmid - vmin) / (vmax - vmin)
-
+            if stretch == 'log':
+                if vmin < vmid:
+                    raise Exception("When using a log stretch, vmin should be larger than vmid")
+                self.midpoint = (vmax - vmid) / (vmin - vmid)
+            elif stretch == 'arcsinh':
+                self.midpoint = (vmid - vmin) / (vmax - vmin)
+            else:
+                self.midpoint = None
 
     def __call__(self, value, clip=None):
 
@@ -96,14 +108,17 @@ class APLpyNormalize(Normalize):
 
             # CUSTOM APLPY CODE
 
+            # Keep track of negative values
+            negative = result < 0.
+
             if self.stretch == 'linear':
 
                 pass
 
             elif self.stretch == 'log':
 
-                result = ma.log10((result/self.midpoint) + 1.) \
-                       / ma.log10((1./self.midpoint) + 1.)
+                result = ma.log10(result * (self.midpoint - 1.) + 1.) \
+                       / ma.log10(self.midpoint)
 
             elif self.stretch == 'sqrt':
 
@@ -122,6 +137,10 @@ class APLpyNormalize(Normalize):
 
                 raise Exception("Unknown stretch in APLpyNormalize: %s" %
                                 self.stretch)
+
+            # Now set previously negative values to 0, as these are
+            # different from true NaN values in the FITS image
+            result[negative] = 0.
 
         if vtype == 'scalar':
             result = result[0]
@@ -150,8 +169,7 @@ class APLpyNormalize(Normalize):
 
         elif self.stretch == 'log':
 
-            val = self.midpoint * \
-                  (ma.power(10., (val*ma.log10(1./self.midpoint+1.))) - 1.)
+            val = (ma.power(10., val * ma.log10(self.midpoint)) - 1.) / (self.midpoint - 1.)
 
         elif self.stretch == 'sqrt':
 
