@@ -387,8 +387,7 @@ class FITSFigure(Layers, Regions, Deprecated):
         xpix, ypix = wcs_util.world2pix(self._wcs, x, y)
 
         if self.userwcs and width and height:
-            degperpix_x = self._wcs.wcs.cd[0,0]
-            degperpix_y = self._wcs.wcs.cd[1,1]
+            degperpix_x,degperpix_y = wcs_util.degperpix_user(self._wcs)
         else:
             degperpix = wcs_util.degperpix(self._wcs)
             degperpix_x = degperpix_y = degperpix

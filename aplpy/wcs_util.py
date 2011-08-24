@@ -259,6 +259,14 @@ def system(wcs,userwcs=False):
 def arcperpix(wcs):
     return degperpix(wcs) * 3600.
 
+def degperpix_user(wcs):
+    """
+    Allow for asymmetric pixels
+    """
+    try:
+        return wcs.wcs.cd.diagonal()
+    except AttributeError:
+        return wcs.wcs.cdelt
 
 def degperpix(wcs):
     try:
