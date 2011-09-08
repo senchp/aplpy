@@ -49,13 +49,13 @@ class Ticks(object):
         self._ax2.yaxis.set_major_locator(lyt)
 
         # Set minor tick locators
-        lx = WCSLocator(wcs=self._wcs, coord='x', minor=True)
+        lx = WCSLocator(wcs=self._wcs, coord='x', minor=True, userwcs=self.userwcs)
         self._ax1.xaxis.set_minor_locator(lx)
-        ly = WCSLocator(wcs=self._wcs, coord='y', minor=True)
+        ly = WCSLocator(wcs=self._wcs, coord='y', minor=True, userwcs=self.userwcs)
         self._ax1.yaxis.set_minor_locator(ly)
-        lxt = WCSLocator(wcs=self._wcs, coord='x', farside=True, minor=True)
+        lxt = WCSLocator(wcs=self._wcs, coord='x', farside=True, minor=True, userwcs=self.userwcs)
         self._ax2.xaxis.set_minor_locator(lxt)
-        lyt = WCSLocator(wcs=self._wcs, coord='y', farside=True, minor=True)
+        lyt = WCSLocator(wcs=self._wcs, coord='y', farside=True, minor=True, userwcs=self.userwcs)
         self._ax2.yaxis.set_minor_locator(lyt)
 
 
