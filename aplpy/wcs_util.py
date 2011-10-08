@@ -1,5 +1,8 @@
+from __future__ import absolute_import
+
 import numpy as np
 
+from aplpy.logger import logger
 
 def convert_coords(x, y, input, output):
 
@@ -230,12 +233,13 @@ def system(wcs):
     elif xcoord == 'ELON' and ycoord == 'ELAT':
         system = 'ecliptic'
     else:
-        print "Warning: cannot determine coordinate system for %s/%s. Assuming equatorial." % (xcoord, ycoord)
+        logger.warning("Cannot determine coordinate system for " + \
+                       "%s/%s. Assuming equatorial." % (xcoord, ycoord))
         system = 'equatorial'
 
     if system == 'equatorial':
         if equinox == '' or np.isnan(equinox):
-            print "Warning: cannot determine equinox. Assuming J2000."
+            logger.warning("Cannot determine equinox. Assuming J2000.")
             equinox = 'j2000'
         elif equinox == 1950.:
             equinox = 'b1950'

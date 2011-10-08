@@ -39,10 +39,10 @@ def add_coloring_to_emit_ansi(fn):
 
 # Initialize logger
 logging.basicConfig(format="%(levelname)s: %(message)s", level=level)
-aplpy_logger = logging.getLogger()
+logger = logging.getLogger()
 
 if color:
     f = logging.Formatter("%(levelname)s: %(message)s")
-    if len(aplpy_logger.handlers) > 0:
-        aplpy_logger.handlers[0].setFormatter(f)
+    if len(logger.handlers) > 0:
+        logger.handlers[0].setFormatter(f)
     logging.StreamHandler.emit = add_coloring_to_emit_ansi(logging.StreamHandler.emit)
