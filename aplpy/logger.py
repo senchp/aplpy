@@ -10,7 +10,7 @@ config.read(os.path.expanduser('~/.aplpyrc'))
 if config.has_option('logging', 'level'):
     level = config.getint('logging', 'level')
 else:
-    level = 20
+    level = logging.INFO
 
 # Find out whether to use color logging
 if config.has_option('logging', 'color'):
