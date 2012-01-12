@@ -72,8 +72,7 @@ class TickLabels(object):
     @auto_refresh
     def set_xformat(self, format):
         '''
-        Set the format of the x-axis tick labels. If the x-axis type is
-        ``longitude`` or ``latitude``, then the options are:
+        Set the format of the x-axis tick labels:
 
             * ``ddd.ddddd`` - decimal degrees, where the number of decimal places can be varied
             * ``hh`` or ``dd`` - hours (or degrees)
@@ -81,24 +80,14 @@ class TickLabels(object):
             * ``hh:mm:ss`` or ``dd:mm:ss`` - hours, minutes, and seconds (or degrees, arcminutes, and arcseconds)
             * ``hh:mm:ss.ss`` or ``dd:mm:ss.ss`` - hours, minutes, and seconds (or degrees, arcminutes, and arcseconds), where the number of decimal places can be varied.
 
-        If the x-axis type is ``scalar``, then the format should be a valid
-        python string format beginning with a ``%``.
-
-        If one of these arguments is not specified, the format for that axis
-        is left unchanged.
+        If one of these arguments is not specified, the format for that axis is left unchanged.
         '''
-        if self._wcs.xaxis_coord_type in ['longitude', 'latitude']:
-            if format.startswith('%'):
-                raise Exception("Cannot specify Python format for longitude or latitude")
-            try:
-                if not self._ax1.xaxis.apl_auto_tick_spacing:
-                    au._check_format_spacing_consistency(format, self._ax1.xaxis.apl_tick_spacing)
-            except au.InconsistentSpacing:
-                warnings.warn("WARNING: Requested label format is not accurate enough to display ticks. The label format will not be changed.")
-                return
-        else:
-            if not format.startswith('%'):
-                raise Exception("For scalar tick labels, format should be a Python format beginning with %")
+        try:
+            if not self._ax1.xaxis.apl_auto_tick_spacing:
+                au._check_format_spacing_consistency(format, self._ax1.xaxis.apl_tick_spacing)
+        except au.InconsistentSpacing:
+            warnings.warn("WARNING: Requested label format is not accurate enough to display ticks. The label format will not be changed.")
+            return
 
         self._ax1.xaxis.apl_label_form = format
         self._ax2.xaxis.apl_label_form = format
@@ -106,8 +95,7 @@ class TickLabels(object):
     @auto_refresh
     def set_yformat(self, format):
         '''
-        Set the format of the y-axis tick labels. If the y-axis type is
-        ``longitude`` or ``latitude``, then the options are:
+        Set the format of the y-axis tick labels:
 
             * ``ddd.ddddd`` - decimal degrees, where the number of decimal places can be varied
             * ``hh`` or ``dd`` - hours (or degrees)
@@ -115,24 +103,14 @@ class TickLabels(object):
             * ``hh:mm:ss`` or ``dd:mm:ss`` - hours, minutes, and seconds (or degrees, arcminutes, and arcseconds)
             * ``hh:mm:ss.ss`` or ``dd:mm:ss.ss`` - hours, minutes, and seconds (or degrees, arcminutes, and arcseconds), where the number of decimal places can be varied.
 
-        If the y-axis type is ``scalar``, then the format should be a valid
-        python string format beginning with a ``%``.
-
-        If one of these arguments is not specified, the format for that axis
-        is left unchanged.
+        If one of these arguments is not specified, the format for that axis is left unchanged.
         '''
-        if self._wcs.yaxis_coord_type in ['longitude', 'latitude']:
-            if format.startswith('%'):
-                raise Exception("Cannot specify Python format for longitude or latitude")
-            try:
-                if not self._ax1.yaxis.apl_auto_tick_spacing:
-                    au._check_format_spacing_consistency(format, self._ax1.yaxis.apl_tick_spacing)
-            except au.InconsistentSpacing:
-                warnings.warn("WARNING: Requested label format is not accurate enough to display ticks. The label format will not be changed.")
-                return
-        else:
-            if not format.startswith('%'):
-                raise Exception("For scalar tick labels, format should be a Python format beginning with %")
+        try:
+            if not self._ax1.yaxis.apl_auto_tick_spacing:
+                au._check_format_spacing_consistency(format, self._ax1.yaxis.apl_tick_spacing)
+        except au.InconsistentSpacing:
+            warnings.warn("WARNING: Requested label format is not accurate enough to display ticks. The label format will not be changed.")
+            return
 
         self._ax1.yaxis.apl_label_form = format
         self._ax2.yaxis.apl_label_form = format
@@ -329,7 +307,7 @@ class TickLabels(object):
 
             else:
 
-                xlabel = xaxis.apl_label_form % xw
+                xlabel = "%g" % xw
 
             if self._wcs.yaxis_coord_type in ['longitude', 'latitude']:
 
@@ -352,7 +330,7 @@ class TickLabels(object):
 
             else:
 
-                ylabel = yaxis.apl_label_form % yw
+                ylabel = "%g" % yw
 
             return  "%s %s (world)" % (xlabel, ylabel)
 
@@ -428,7 +406,7 @@ class WCSFormatter(mpl.Formatter):
 
             ipos = np.argmin(np.abs(self.axis.apl_tick_positions_pix - x))
             label = self.axis.apl_tick_spacing * self.axis.apl_tick_positions_world[ipos]
-            label = self.axis.apl_label_form % label
+            label = "%g" % label
 
         if mpl.rcParams['text.usetex']:
             return "$"+string.join(label, "")+"$"
