@@ -4,7 +4,7 @@ matplotlib.use('Agg')
 import numpy as np
 import pytest
 
-from aplpy import FITSFigure
+from ..aplpy import FITSFigure
 
 
 def test_colorbar_invalid():

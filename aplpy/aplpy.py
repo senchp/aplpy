@@ -60,7 +60,7 @@ if montage_installed:
 from . import contour_util
 from . import convolve_util
 from . import image_util
-from . import header as header_util
+from . import header_util
 from . import wcs_util
 from . import slicer
 
