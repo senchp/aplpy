@@ -514,7 +514,7 @@ class FITSFigure(Layers, Regions, Deprecated):
 
     @auto_refresh
     def show_grayscale(self, vmin=None, vmid=None, vmax=None,
-                       pmin=0.25, pmax=99.75,
+                       pmin=0.25, pmax=99.75, zscale=False, contrast=1.0,
                        stretch='linear', exponent=2, invert='default',
                        smooth=None, kernel='gauss', aspect='equal',
                        interpolation='nearest'):
@@ -592,7 +592,7 @@ class FITSFigure(Layers, Regions, Deprecated):
             cmap = 'gray'
 
         self.show_colorscale(vmin=vmin, vmid=vmid, vmax=vmax,
-                             pmin=pmin, pmax=pmax,
+                             pmin=pmin, pmax=pmax, zscale=zscale, contrast=contrast,
                              stretch=stretch, exponent=exponent, cmap=cmap,
                              smooth=smooth, kernel=kernel, aspect=aspect,
                              interpolation=interpolation)
@@ -603,7 +603,7 @@ class FITSFigure(Layers, Regions, Deprecated):
 
     @auto_refresh
     def show_colorscale(self, vmin=None, vmid=None, vmax=None, \
-                             pmin=0.25, pmax=99.75,
+                             pmin=0.25, pmax=99.75, zscale=False, contrast=1.0,
                              stretch='linear', exponent=2, cmap='default',
                              smooth=None, kernel='gauss', aspect='equal',
                              interpolation='nearest'):
@@ -673,11 +673,15 @@ class FITSFigure(Layers, Regions, Deprecated):
         if cmap == 'default':
             cmap = self._get_colormap_default()
 
-        min_auto = np.equal(vmin, None)
-        max_auto = np.equal(vmax, None)
+        min_auto = np.equal(vmin, None) and not zscale
+        max_auto = np.equal(vmax, None) and not zscale
 
         # The set of available functions
         cmap = mpl.cm.get_cmap(cmap)
+
+        if zscale:
+            sample = np.random.choice(self._data[np.isfinite(self._data)], 1000, replace=False)
+            vmin, vmax = image_util.zscale(sample, contrast=contrast)
 
         if min_auto:
             vmin = self._auto_v(pmin)

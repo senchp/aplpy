@@ -5,6 +5,8 @@ from astropy import log
 
 from . import math_util as m
 
+from numpy.linalg import lstsq
+
 
 class interp1d(object):
 
@@ -76,6 +78,39 @@ def percentile_function(array):
 
     return spl
 
+def zscale(array, contrast, max_reject=0.5, krej=2.5, max_iters=100):
+    array = array.ravel()
+    array = array[np.where(np.isnan(array) == False)]
+    array = array[np.where(np.isinf(array) == False)]
+    array.sort()
+
+    midpoint = int((array.size-1)/2)
+    inds = np.arange(array.size) - midpoint
+    ones = np.ones_like(array)
+    
+    if (contrast == 0):
+        return array.min(), array.max()
+
+    clipped = np.zeros_like(array, dtype=bool) 
+    rejected = 0.0
+    iters = 0
+    while (rejected<=max_reject) & (iters<max_iters):
+        iters += 1
+        x, resid, _, _ = lstsq(np.column_stack((inds[~clipped], ones[~clipped])), array)
+        clipped_new = resid > krej*np.mean(resid)
+        if np.count_nonzero(clipped_new) == 0:
+            break
+        clipped[~clipped] = clipped_new
+        rejected = np.count_nonzero(clipped) / clipped.size
+
+    log.info("zscale: ran for {0} iterations and clipped {1} points".format(iters, rejected))
+
+    slope, intercept = x
+    vs =   [array[midpoint] + ((slope/contrast) * (1-midpoint)), 
+            array[midpoint] + ((slope/contrast) * (array.size-midpoint))]
+    vmax = np.min((np.max(vs), np.max(array)))
+    vmin = np.max((np.min(vs), np.min(array)))
+    return vmin, vmax
 
 def stretch(array, function, exponent=2, midpoint=None):
 
